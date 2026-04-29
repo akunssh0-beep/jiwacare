@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skrining MMYS V.1 - Kesehatan Jiwa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="./internal_assets/xlsx.full.min.js"></script>
+    <script src="./internal_assets/qrcode.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            --glass-bg: rgba(255, 255, 255, 0.4);
+            --text-main: #1e293b;
+        }
+
+        .dark {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f1f5f9;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            transition: background 0.3s ease;
+        }
+        
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+        }
+
+        .dark .bg-white\/40 { background: rgba(255, 255, 255, 0.05); }
+        .dark .text-slate-800 { color: #f1f5f9; }
+        .dark .text-slate-600 { color: #94a3b8; }
+        .dark .bg-white { background: #1e293b; color: white; }
+        .dark .border-slate-200 { border-color: #334155; }
+
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white !important; color: black !important; }
+            .glass { border: none; box-shadow: none; background: white; }
+        }
+
+        .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        #qrcode img { margin: 0 auto; border: 4px solid white; border-radius: 8px; }
+    </style>
+<meta name="theme-color" content="#3b82f6"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-512.png">
+</head>
+<body class="p-4 md:p-8 flex justify-center items-start">
+
+    <div class="fixed top-4 right-4 no-print">
+        <button onclick="toggleDarkMode()" class="p-3 rounded-full glass hover:scale-110 transition shadow-lg">
+            <span id="dark-icon">🌙</span>
+        </button>
+    </div>
+
+    <div id="app" class="w-full max-w-4xl glass rounded-[32px] p-6 md:p-10">
+        
+        <div id="step-landing" class="text-center py-10">
+            <h1 class="text-3xl font-extrabold text-slate-800 mb-2">Mini MindHEAR Youth Scale V.1</h1>
+            <p class="text-slate-500 mb-8 italic">Silahkan isi data diri untuk memulai skrining otomatis</p>
+            
+            <div class="max-w-md mx-auto space-y-4 text-left bg-white/40 p-6 rounded-3xl border border-white">
+                <div class="flex flex-col gap-2">
+                    <label class="text-xs font-bold text-slate-600 uppercase">Nama Peserta</label>
+                    <input type="text" id="initNama" placeholder="Masukkan nama..." class="p-3 rounded-xl bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label class="text-xs font-bold text-slate-600 uppercase">Usia (Tahun)</label>
+                    <input type="number" id="initUsia" placeholder="Contoh: 12" class="p-3 rounded-xl bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                </div>
+                <button onclick="checkAutoMode()" class="w-full mt-4 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition active:scale-95 shadow-lg">
+                    Mulai Skrining
+                </button>
+                <p class="text-[10px] text-center text-slate-400 mt-2">Sistem akan memilih instrumen otomatis sesuai usia (7-18 th)</p>
+            </div>
+        </div>
+
+        <div id="main-form" class="hidden animate-fade-in">
+            <div class="mb-6 no-print">
+                <div class="flex justify-between text-xs font-bold text-blue-600 mb-2 uppercase tracking-widest">
+                    <span id="progress-text">Progres: 0%</span>
+                    <span id="question-counter">Soal 0 dari 6</span>
+                </div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                    <div id="progress-bar" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <button onclick="location.reload()" class="no-print mb-6 text-sm text-slate-500 flex items-center gap-2 hover:text-blue-600">
+                ← Ganti Data Identitas
+            </button>
+
+            <header class="mb-8 border-b border-white pb-6">
+                <h2 class="text-2xl font-bold text-slate-800" id="form-title">Formulir Skrining</h2>
+                <p id="filler-info" class="text-sm text-blue-600 font-medium"></p>
+            </header>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 no-print">
+                <div class="flex flex-col gap-2">
+                    <label class="text-xs font-bold text-slate-600 uppercase">Nama Peserta</label>
+                    <input type="text" id="inputNama" readonly class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-white focus:outline-none cursor-not-allowed">
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label class="text-xs font-bold text-slate-600 uppercase">Usia (Tahun)</label>
+                    <input type="number" id="inputUsia" readonly class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-white focus:outline-none cursor-not-allowed">
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label class="text-xs font-bold text-slate-600 uppercase">Tanggal Periksa</label>
+                    <input type="date" id="inputTgl" class="p-3 rounded-xl bg-white/50 border border-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                </div>
+            </div>
+
+            <div id="questions-container" class="space-y-8">
+                <section>
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <span class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm">A</span>
+                        Skala Anxietas (Kecemasan)
+                    </h3>
+                    <div id="skalaA-list" class="space-y-4"></div>
+                </section>
+
+                <section>
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <span class="w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center text-sm">B</span>
+                        Skala Depresi
+                    </h3>
+                    <div id="skalaB-list" class="space-y-4"></div>
+                </section>
+            </div>
+
+            <div class="mt-10 flex gap-4 no-print">
+                <button onclick="prosesSkoring()" class="flex-1 bg-slate-800 text-white font-bold py-4 rounded-2xl hover:bg-slate-900 transition active:scale-95 shadow-xl">
+                    Lihat Hasil Interpretasi
+                </button>
+            </div>
+        </div>
+
+        <div id="result-section" class="hidden animate-fade-in pt-4 text-center">
+            <div class="flex justify-between items-center no-print mb-6">
+                <button onclick="location.reload()" class="text-sm text-slate-500 flex items-center gap-2 hover:text-blue-600">
+                    ← Ulangi Skrining
+                </button>
+                <button onclick="exportToExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">
+                    📊 Export Excel
+                </button>
+            </div>
+            
+            <h2 class="font-bold text-xl text-slate-800 mb-8">LAPORAN HASIL SKRINING</h2>
+            
+            <div class="grid grid-cols-2 gap-4 mb-8 text-sm p-6 bg-white/30 rounded-2xl text-left">
+                <p><span class="text-slate-500">Nama:</span> <b id="resNama"></b></p>
+                <p><span class="text-slate-500">Usia:</span> <b id="resUsia"></b> th</p>
+                <p><span class="text-slate-500">Tanggal:</span> <b id="resTgl"></b></p>
+                <p><span class="text-slate-500">Instrumen:</span> <b>MMYS V.1</b></p>
+            </div>
+
+            <div class="space-y-6 text-left">
+                <div id="boxAnxietas" class="p-6 rounded-2xl border">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="text-xs font-bold uppercase tracking-widest opacity-60">Interpretasi Anxietas</h4>
+                        <span id="scoreAnx" class="text-xs font-bold bg-white/50 px-2 py-1 rounded-lg"></span>
+                    </div>
+                    <p id="resAnx" class="text-lg font-bold"></p>
+                </div>
+                <div id="boxDepresi" class="p-6 rounded-2xl border">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="text-xs font-bold uppercase tracking-widest opacity-60">Interpretasi Depresi</h4>
+                        <span id="scoreDep" class="text-xs font-bold bg-white/50 px-2 py-1 rounded-lg"></span>
+                    </div>
+                    <p id="resDep" class="text-lg font-bold"></p>
+                </div>
+            </div>
+
+            <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                <div class="p-6 bg-blue-50/50 rounded-2xl border border-blue-100">
+                    <h4 class="font-bold text-blue-800 mb-2 flex items-center gap-2">🏥 Rekomendasi Medis:</h4>
+                    <ul id="resTindakLanjut" class="text-sm text-blue-700 space-y-2 list-disc ml-5"></ul>
+                </div>
+                <div class="p-6 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+                    <h4 class="font-bold text-emerald-800 mb-2 flex items-center gap-2">💡 Saran Psikologis:</h4>
+                    <ul id="resSaran" class="text-sm text-emerald-700 space-y-2 list-disc ml-5"></ul>
+                </div>
+            </div>
+
+            <div class="mt-10 py-6 border-t border-dashed border-slate-300">
+                <p class="text-[10px] text-slate-400 uppercase font-bold mb-4">Verifikasi Laporan Digital</p>
+                <div id="qrcode" class="flex justify-center"></div>
+                <p class="text-[9px] text-slate-400 mt-2" id="qr-id"></p>
+            </div>
+
+            <div class="no-print mt-8 flex gap-4">
+                <button onclick="window.print()" class="flex-1 bg-white border-2 border-slate-800 text-slate-800 font-bold py-3 rounded-xl hover:bg-slate-50 transition">
+                    🖨️ Cetak PDF / Laporan
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let currentMode = '';
+        let lastResultData = {}; // Simpan data untuk excel
+        const questions = {
+            anak: {
+                A: [
+                    "Dalam 2 minggu terakhir, anak sering merasa khawatir atau tidak tenang, tegang, deg-degan dan gelisah terutama terhadap hal-hal negatif atau yang belum tentu terjadi.",
+                    "Dalam 2 minggu terakhir, anak berpikir berlebihan dan tidak bisa mengendalikan diri, terutama terhadap hal-hal negatif atau yang belum tentu terjadi.",
+                    "Dalam 2 minggu terakhir, anak sulit tidur dan berkonsentrasi terutama saat memikirkan hal-hal negatif yang belum tentu terjadi."
+                ],
+                B: [
+                    "Dalam 2 minggu terakhir, anak sering merasa sedih atau tertekan padahal tidak ada penyebab yang jelas.",
+                    "Dalam 2 minggu terakhir, anak tidak tertarik lagi dengan kegiatan atau hal-hal yang biasanya dia suka.",
+                    "Dalam 2 minggu terakhir, anak merasa sering capek, sulit tidur, dan sulit fokus saat belajar atau melakukan kegiatan."
+                ]
+            },
+            remaja: {
+                A: [
+                    "Dalam 2 minggu terakhir, Saya sering merasa khawatir atau tidak tenang, tegang, deg-degan dan gelisah terutama terhadap hal-hal negatif atau yang belum tentu terjadi.",
+                    "Dalam 2 minggu terakhir, Saya berpikir berlebihan dan tidak bisa mengendalikan diri, terutama terhadap hal-hal negatif atau yang belum tentu terjadi.",
+                    "Dalam 2 minggu terakhir, Saya sulit tidur dan berkonsentrasi terutama saat memikirkan hal-hal negatif yang belum tentu terjadi."
+                ],
+                B: [
+                    "Dalam 2 minggu terakhir, Saya sering merasa sedih atau tertekan padahal tidak ada penyebab yang jelas.",
+                    "Dalam 2 minggu terakhir, Saya tidak tertarik lagi dengan kegiatan atau hal-hal yang biasanya saya suka.",
+                    "Dalam 2 minggu terakhir, Saya merasa sering capek, sulit tidur, dan sulit fokus saat belajar atau melakukan kegiatan."
+                ]
+            }
+        };
+
+        document.getElementById('inputTgl').valueAsDate = new Date();
+
+        // Dark Mode Function
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            document.getElementById('dark-icon').innerText = isDark ? '☀️' : '🌙';
+        }
+
+        // Progress Function
+        function updateProgress() {
+            const answered = document.querySelectorAll('input[type="radio"]:checked').length;
+            const total = 6;
+            const percentage = Math.round((answered / total) * 100);
+            
+            document.getElementById('progress-bar').style.width = percentage + '%';
+            document.getElementById('progress-text').innerText = `Progres: ${percentage}%`;
+            document.getElementById('question-counter').innerText = `Soal ${answered} dari ${total}`;
+        }
+
+        function checkAutoMode() {
+            const nama = document.getElementById('initNama').value;
+            const usiaInput = document.getElementById('initUsia').value;
+            const usia = parseInt(usiaInput);
+
+            if(!nama || !usiaInput) {
+                Swal.fire('Data Kosong', 'Harap isi Nama dan Usia terlebih dahulu.', 'error');
+                return;
+            }
+
+            if (usia >= 7 && usia <= 9) {
+                startApp('anak', nama, usia);
+            } else if (usia >= 10 && usia <= 18) {
+                startApp('remaja', nama, usia);
+            } else {
+                Swal.fire('Batas Usia', 'Instrumen ini hanya untuk usia 7 - 18 tahun.', 'warning');
+            }
+        }
+
+        function startApp(mode, nama, usia) {
+            currentMode = mode;
+            document.getElementById('step-landing').classList.add('hidden');
+            document.getElementById('main-form').classList.remove('hidden');
+            
+            document.getElementById('inputNama').value = nama;
+            document.getElementById('inputUsia').value = usia;
+            
+            document.getElementById('form-title').innerText = mode === 'anak' ? 'MMYS V.1 (Kategori Anak)' : 'MMYS V.1 (Kategori Remaja)';
+            document.getElementById('filler-info').innerText = mode === 'anak' ? '💡 Diisi oleh Orang Tua / Pengasuh' : '💡 Diisi mandiri oleh Remaja';
+            
+            renderQuestions('A', questions[mode].A, 'skalaA-list');
+            renderQuestions('B', questions[mode].B, 'skalaB-list');
+            updateProgress(); // Inisialisasi progress
+        }
+
+        function renderQuestions(skala, list, containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = list.map((q, i) => `
+                <div class="bg-white/40 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition hover:bg-white/60">
+                    <p class="text-slate-800 text-sm leading-relaxed"><span class="font-bold mr-2">${i+1}.</span>${q}</p>
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <label class="flex-1">
+                            <input type="radio" name="${skala}${i+1}" value="1" onchange="updateProgress()" class="hidden peer" required>
+                            <div class="text-center p-2 rounded-lg bg-white/60 dark:bg-slate-700 cursor-pointer peer-checked:bg-slate-800 peer-checked:text-white transition text-xs font-bold">YA</div>
+                        </label>
+                        <label class="flex-1">
+                            <input type="radio" name="${skala}${i+1}" value="0" onchange="updateProgress()" class="hidden peer" checked>
+                            <div class="text-center p-2 rounded-lg bg-white/60 dark:bg-slate-700 cursor-pointer peer-checked:bg-slate-400 peer-checked:text-white transition text-xs font-bold">TIDAK</div>
+                        </label>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function prosesSkoring() {
+            const nama = document.getElementById('inputNama').value;
+            const usia = document.getElementById('inputUsia').value;
+            const tgl = document.getElementById('inputTgl').value;
+
+            if(!nama || !usia || !tgl) {
+                Swal.fire('Data Tidak Lengkap', 'Harap lengkapi semua data identitas.', 'error');
+                return;
+            }
+
+            const getVal = (n) => parseInt(document.querySelector(`input[name="${n}"]:checked`).value);
+            
+            const a1 = getVal('A1'), a2 = getVal('A2'), a3 = getVal('A3');
+            const b1 = getVal('B1'), b2 = getVal('B2'), b3 = getVal('B3');
+
+            const totalScoreA = a1 + a2 + a3;
+            const totalScoreB = b1 + b2 + b3;
+
+            // Logika Skala A & Saran
+            let interpretA, classA, rA, saranA;
+            if (a1 === 1 && a3 === 1) {
+                interpretA = "Menunjukkan kemungkinan gejala ansietas berat";
+                classA = "bg-rose-100 text-rose-800 border-rose-200";
+                rA = "Konsultasi ke Dokter Umum/Jiwa atau Psikolog Klinis untuk pemeriksaan mendalam.";
+                saranA = "Latih teknik relaksasi pernapasan 4-7-8 setiap kali merasa gelisah.";
+            } else if (a1 === 1 || a3 === 1) {
+                interpretA = "Menunjukkan kemungkinan gejala ansietas ringan";
+                classA = "bg-orange-100 text-orange-800 border-orange-200";
+                rA = "Edukasi kesehatan jiwa dan pantau kondisi dalam 2 minggu kedepan.";
+                saranA = "Kurangi paparan gadget sebelum tidur dan coba menulis jurnal perasaan.";
+            } else {
+                interpretA = "Tidak menunjukkan kemungkinan gejala ansietas";
+                classA = "bg-emerald-100 text-emerald-800 border-emerald-200";
+                rA = "Pertahankan kondisi kesehatan mental yang sudah baik.";
+                saranA = "Lanjutkan aktivitas sosial dan hobi yang mendukung suasana hati positif.";
+            }
+
+            // Logika Skala B & Saran
+            let interpretB, classB, rB, saranB;
+            if (b1 === 1 && b3 === 1) {
+                interpretB = "Menunjukkan kemungkinan gejala depresi berat";
+                classB = "bg-rose-100 text-rose-800 border-rose-200";
+                rB = "Rujukan segera untuk tatalaksana medis dan dukungan psikologis intensif.";
+                saranB = "Cari dukungan dari orang terpercaya dan hindari menyendiri terlalu lama.";
+            } else if (b1 === 1 || b3 === 1) {
+                interpretB = "Menunjukkan kemungkinan gejala depresi ringan";
+                classB = "bg-orange-100 text-orange-800 border-orange-200";
+                rB = "Konseling awal oleh tenaga kesehatan atau guru BK di sekolah.";
+                saranB = "Coba lakukan aktivitas fisik ringan di luar ruangan minimal 15 menit sehari.";
+            } else {
+                interpretB = "Tidak menunjukkan kemungkinan gejala depresi";
+                classB = "bg-emerald-100 text-emerald-800 border-emerald-200";
+                rB = "Lakukan skrining rutin setiap 6 bulan sekali.";
+                saranB = "Terapkan pola makan sehat dan istirahat yang cukup untuk menjaga mood.";
+            }
+
+            // Simpan data untuk Excel
+            lastResultData = { Nama: nama, Usia: usia, Tanggal: tgl, Skor_Anx: totalScoreA, Interpretasi_Anx: interpretA, Skor_Dep: totalScoreB, Interpretasi_Dep: interpretB };
+
+            // Update UI Hasil
+            document.getElementById('resNama').innerText = nama;
+            document.getElementById('resUsia').innerText = usia;
+            document.getElementById('resTgl').innerText = tgl;
+            
+            document.getElementById('scoreAnx').innerText = `Skor: ${totalScoreA}/3`;
+            document.getElementById('resAnx').innerText = interpretA;
+            document.getElementById('boxAnxietas').className = `p-6 rounded-2xl border ${classA}`;
+            
+            document.getElementById('scoreDep').innerText = `Skor: ${totalScoreB}/3`;
+            document.getElementById('resDep').innerText = interpretB;
+            document.getElementById('boxDepresi').className = `p-6 rounded-2xl border ${classB}`;
+
+            document.getElementById('resTindakLanjut').innerHTML = `<li>${rA}</li><li>${rB}</li>`;
+            document.getElementById('resSaran').innerHTML = `<li>${saranA}</li><li>${saranB}</li>`;
+
+            // Generate QR Code
+            const qrText = `VERIFIED-MMYS-${Date.now()}-${nama}`;
+            document.getElementById('qrcode').innerHTML = "";
+            new QRCode(document.getElementById("qrcode"), { text: qrText, width: 100, height: 100 });
+            document.getElementById('qr-id').innerText = qrText;
+
+            // Tampilkan Hasil
+            document.getElementById('main-form').classList.add('hidden');
+            document.getElementById('result-section').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            Swal.fire({ title: 'Berhasil!', text: 'Laporan skrining telah siap.', icon: 'success', timer: 2000, showConfirmButton: false });
+
+            simpanKeSheets({ nama, usia, tgl, totalScoreA, totalScoreB, interpretA, interpretB });
+        }
+
+        // Feature: Export Excel
+        function exportToExcel() {
+            const worksheet = XLSX.utils.json_to_sheet([lastResultData]);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Hasil Skrining");
+            XLSX.writeFile(workbook, `Hasil_MMYS_${lastResultData.Nama}.xlsx`);
+        }
+
+        function simpanKeSheets(data) {
+            const url = 'URL_WEB_APP_GOOGLE_SCRIPT_ANDA'; 
+            if(url !== 'URL_WEB_APP_GOOGLE_SCRIPT_ANDA') {
+                fetch(url, { method: 'POST', mode: 'no-cors', body: JSON.stringify(data) })
+                .then(() => console.log("Data terkirim ke database"))
+                .catch(err => console.log("Gagal kirim data"));
+            }
+        }
+    </script>
+<script>if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');</script>
+</body>
+</html>
